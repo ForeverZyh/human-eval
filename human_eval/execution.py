@@ -8,6 +8,7 @@ import multiprocessing
 import platform
 import signal
 import tempfile
+import traceback
 
 
 def check_correctness(problem: Dict, completion: str, timeout: float,
@@ -63,9 +64,30 @@ def check_correctness(problem: Dict, completion: str, timeout: float,
                         exec(check_program, exec_globals)
                 result.append("passed")
             except TimeoutException:
-                result.append("timed out")
+                result.append("TimeoutException: timed out")
+            except AssertionError:
+                def get_test_case(program, error):
+                    pos = error.rfind("line ") + len("line ")
+                    line_number = 0
+                    for i in range(1, 5):
+                        if error[pos:pos+i].isnumeric():
+                            line_number = int(error[pos:pos+i])
+                    lines = program.split("\n")
+                    res = lines[line_number]
+                    p = line_number - 1
+                    while res.find("assert") == -1 and p >= 0:
+                        res = lines[p] + res
+                        p -= 1
+                    p = line_number + 1
+                    while p < len(lines) and lines[p].find("assert") == -1:
+                        res += lines[p]
+                        p += 1
+
+                    return "AssertionError at " + res
+
+                result.append(f"{get_test_case(check_program, traceback.format_exc())}")
             except BaseException as e:
-                result.append(f"failed: {e}")
+                result.append(f"{repr(e)}")
 
             # Needed for cleaning up.
             shutil.rmtree = rmtree
